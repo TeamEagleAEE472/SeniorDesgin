@@ -25,26 +25,28 @@ W_pounds     = W*0.224809                     % pounds gross weight
 
 % Main Wing parameters
 b            = 2.0                            % m Wing Span 
-Rootc        = 0.3                           ;% m Root Chord
-Tipc         = 0.3                           ;% m Tip Chord
+Rootc        = 0.25                           ;% m Root Chord
+Tipc         = 0.25                           ;% m Tip Chord
 c            = (Rootc+Tipc)/2                 % m Chord Length 
 S            = b*c                            % m^2 Wing Area
 AR           = b^2/S                          % Aspect Ratio
-WL           = W/S                           ;% N/m^2 Wing Loading
+WL           = W/S                            % Pascals Wing Loading
+WL2          = m/S                            % kg/m^2 Wing Loading
 
-if AR        > 8                             
-    error('Error. Aspect Ratio should be less than 8. Plane needs to be vibrationally sound and able to maneuver.')
+if AR        > 10                             
+    error('Error. Aspect Ratio should be less than 10. Plane needs to be vibrationally sound and able to maneuver.')
 end
 
 % Atmospheric parameters
 mu           = 1.78E-5                       ;% Ns/m^2 (Dynamic viscosity at 200m)
 Rg           = 287                           ;% J/kgK Gas Constant
-T            = 299.817                       ;% Kelvin (299.8 K = 80 F) (temporary SWAG)
-p            = 99000                         ;% Pa (Static Pressure at 200m) 
+T            = 297                           ;% Kelvin (300 K = 80 F) (temporary SWAG)
+p            = 100000                         ;% Pa (Static Pressure at 200m) 
 rho          = p/(Rg*T)                       % kg/m^3 (Air Density at 200m)
 
 % Reynolds Number
 Re           = rho*v*c/mu                    ;% Reynolds Number
+Re           = Re(319)
 
 % Battery parameters
 V            = 11.1                          ;% Volts
@@ -55,7 +57,7 @@ C            = 1.3                           ;% Ampere*hours  (Capacity)
 IMax         = C*CRating                     ;% Amperes Max Current Draw
 I            = 0.5*IMax                      ;% Amperes Average Current Draw (SWAG)
 t            = Rt/I^n*(C/Rt)^n               ;% Hours (Battery Discharge Time)
-eta_tot      = 0.5                           ;% Combined Prop/Battery Efficiency
+eta_battery  = 0.5                           ;% Battery Efficiency
 
 %% SLUF
 % Lift and drag parameters
@@ -89,7 +91,7 @@ T_R          = 2*D                           ;% Newtons Thrust Required (SLUF)
 P_R          = T_R.*v                        ;% Watts   Power  Required (SLUF) 
 
 %% Endurance and Range (SLUF ONLY) !@#$%(Figure out how to incorporate turning flight into range)!@#$%
-E            = Rt.^(1-n).*(eta_tot.*V...     ;% seconds Endurance line 1
+E            = Rt.^(1-n).*(eta_battery.*V... ;% seconds Endurance line 1
                .*C./P_R).^n.*3600            ;% seconds Endurance line 2
 R            = E.*v                          ;% meters  Range
 
@@ -147,8 +149,12 @@ Emax            = max(E)                     ;% Max Endurance
 E_at_Rmax       = E(218);  % relevant 2/8/16 ;% Endurance at Max Range velocity
 Rmax            = max(R)                     ;% Max Range
 Lapsmax         = max(NLaps)                  % Max Number of Laps
-[MaxPoints,loc] = max(Points)                ;% Max Number of Points
-OptimalVelocity = v(loc)                         
+[MaxPoints,loc1]= max(Points)                 % Max Number of Points
+MaxPointsVel    = v(loc1)                    ;     
+[MaxRange,loc2] = max(R)                     ;% Max Range
+MaxRangeVel     = v(loc2)                    ;     
+[MaxEndur,loc3] = max(E)                     ;% Max Endurance
+MaxEndurVel     = v(loc3)                    ;     
 
 vMax         = sqrt(((max(T_A)/W)*(W/S)+ ...
               (W/S)*sqrt((max(T_A)/W).^2-...
@@ -156,75 +162,63 @@ vMax         = sqrt(((max(T_A)/W)*(W/S)+ ...
           
 % Max Points
 figure(1)
-plot(v,Points,'g',OptimalVelocity,MaxPoints,'ro')
+plot(v,Points,'g',MaxPointsVel,MaxPoints,'ro')
 xlabel('velocity (Meters/Second)')
 ylabel('Points')
 title('Velocity vs. Score') 
 legend('3S battery','Velocity at Max Score')
 
-figure(100)
-plot(Nballs,Points,'g')
-xlabel('Number of Balls')
-ylabel('Points')
-title('Number of Balls vs. Score') 
-
-
-
 % Endurance, Range, and Score vs. Velocity
-figure(2) 
-subplot(3,1,1) % optimal velocity is 8.710 m/s for max endurance
-plot(v,E,'b')
+figure(2)  % optimal velocity is 8.710 m/s for max endurance
+plot(v,E,'b--',MaxEndurVel,MaxEndur,'go',9.309,342.9,'ro')
 xlabel('velocity (Meters/Second)')
 ylabel('Endurance (Seconds)')
 title('Velocity vs. Endurance') 
-legend('3S battery')
-subplot(3,1,2) % optimal velocity is 10.822 m/s for max range
-plot(v,R,'c')
+legend('3S battery','Velocity at Max Endurance','Velocity at Max Range')
+
+figure(3) % optimal velocity is 10.822 m/s for max range
+plot(v,R,'r-.',MaxRangeVel,MaxRange,'ro')
 xlabel('velocity (Meters/Second)')
 ylabel('Range (Meters)')
 title('Velocity vs. Range') 
-legend('3S battery')
-subplot(3,1,3)% optimal velocity is 10.822 m/s for max score
-plot(v,Points,'g')
-xlabel('velocity (Meters/Second)')
-ylabel('Points')
-title('Velocity vs. Score') 
-legend('3S battery')
+legend('3S battery','Velocity at Max Range')
+
 
 %% Turning Radius and Rate and Load Factor vs. Velocity
-figure(3) 
-subplot(2,2,1)
-plot(v,nLoads,'r')
-xlabel('Velocity (Meters/Second)')
-ylabel('Load Factor')
-title('Velocity vs. Load Factor') 
-subplot(2,2,2)
-plot(BankAngles*180/pi,nLoads,'r')
-xlabel('Bank Angle (Degrees)')
-ylabel('Load Factor')
-title('Bank Angle vs. Load Factor') 
-subplot(2,2,3)
-plot(v,Rturn,'g')
+figure(4)
+plot(9.309,3.124,'ro',v,Rturn,'g')
 xlabel('Velocity (Meters/Second)')
 ylabel('Turning Radius (Meters)')
 title('Velocity vs. Turning Radius') 
-subplot(2,2,4)
-plot(v,w,'b')
+legend('Radius at optimal velocity')
+figure(5)
+plot(9.309,2.17,'ro',v,w,'b')
 xlabel('Velocity (Meters/Second)')
 ylabel('Turning Rate (Radians/Second)')
 title('Velocity vs. Turning Rate') 
+legend('Radius at optimal velocity')
 axis([0 10 0 50])
+figure(6) 
+plot(9.039,1.12,'ro',v,nLoads,'r')
+xlabel('Velocity (Meters/Second)')
+ylabel('Load Factor')
+title('Velocity vs. Load Factor') 
+legend('Load Factor at optimal velocity')
+figure(7)
+plot(45,1.414,'ro',BankAngles*180/pi,nLoads,'r')
+xlabel('Bank Angle (Degrees)')
+ylabel('Load Factor')
+legend('Load Factor at assumed bank angle')
 %% Power and Thrust vs Velocity
-figure(5) 
-subplot(2,1,1)
-plot(v,T_R,'k',v,T_A,'m')
+figure(8) 
+plot(v,T_R,'k',v,T_A,'m--')
 xlabel('Velocity (Meters/Second)')
 ylabel('Thrust (Newtons)')
 title('Velocity vs. Thrust') 
 legend('Thrust Required','Thrust Available')
 axis([0 30 0 40])
-subplot(2,1,2)
-plot(v,P_R,'g',v,P_A,'b')
+figure(9)
+plot(v,P_R,'g',v,P_A,'b--')
 xlabel('Velocity (Meters/Second)')
 ylabel('Power (Watts)')
 title('Velocity vs. Power') 
@@ -232,146 +226,145 @@ legend('Power Required','Power Available')
 axis([0 30 0 300])
 
 %% Climbing and Gliding
-figure(6)
-subplot(3,1,1)
+figure(10)
 plot(v,ROC)
 xlabel('Velocity (Meters/Second)')
 ylabel('Rate Of Climb (Meters/Second)')
 title('Velocity vs. Rate Of Climb')
 axis([0 30 0 10])
-subplot(3,1,2)
+figure(11)
 plot(L_D,Rglide)
 xlabel('L/D Ratio')
 ylabel('Glide Range (Meters)')
 title('L/D Ratio vs. Glide Range')
-subplot(3,1,3)
+figure(12)
 plot(L_D,Points,'m')
 xlabel('L/D Ratio')
 ylabel('Points')
 title('L/D vs. Score') 
 
 
-%  
-%  
+ 
+ 
+
+%Rturn        = v.^2/(g*sqrt(nLoadF.^2-1))    ;% meters Turning Radius
+%w            = g.*sqrt(nLoadF.^2-1)./v       ;% rad/s  Turning Rate
+
+
+%% MAY NOT NEED THESE %%
+          
+% vt           = v                              ;% ft/s velocity seen by the tail wing
+% lt           = 24/12                          ;% ft distance from main cg to tail ac
+% bt           = 24/12                          ;% ft tail wing span
+% ct           = 5/12                           ;% ft tail chord length
+% St           = bt*ct                          ;% ft tail wing area
+% ARt          = bt^2/St                        ;% Tail Aspect Ratio
+% qt           = 0.5*rho*vt^2                   ;% dynamic pressure at tail
+% eta_t        = qt/q                           ;% dynamic pressure ratio for tail (can probably assume = 1)
+% VH           = lt*St/(S*cbar)                 ;% Horizontal Tail Volume Ratio
 % 
-% %Rturn        = v.^2/(g*sqrt(nLoadF.^2-1))    ;% meters Turning Radius
-% %w            = g.*sqrt(nLoadF.^2-1)./v       ;% rad/s  Turning Rate
+% vv           = v                              ;% ft/s velocity seen by the vertical wing
+% lv           = 24/12                          ;% ft distance from main cg to tail ac
+% bv           = 24/12                          ;% ft vertical tail wing span
+% cv           = 5/12                           ;% ft vertical tail chord length
+% Sv           = bv*cv                          ;% ft vertical tail wing area
+% ARv          = bv^2/Sv                        ;% Vertical Tail Aspect Ratio
+% qv           = 0.5*rho*vv^2                   ;% dynamic pressure at vertical tail (can probably assume = 1)
+% eta_v        = qv/q                           ;% dynamic pressure ratio for vertical tail
+% Vv           = lv*Sv/(S*cbar)                 ;% Vertical Tail Volume Ratio
+% 
+% tau          = 0.7                            ;% Flap Effectiveness Parameter
+% alpha        = 0                              ;% rad or deg? Angle of Attack
+% Beta         = 0                              ;% rad or deg? Sideslip Angle
+% 
+% CLaw         = 0                              ;%
+% CLav         = 0                              ;%
+% CLat         = 0                              ;%
+% 
+% deda         = 2*CLaw/(pi*AR)                 ;% Change in downwash angle wrt. AOA
+% y2           = 30/12                          ;% ft furthest edge of aileron
+% y1           = 6/12                           ;% ft nearest edge of aileron
+% Clda         = 2*CLaw*tau/(S*b)*c*(y2-y1)     ;% 1/rad Aileron  control power (change in roll  moment wrt. aileron  deflection.) 
+% Cmde         = -eta_t*VH*CLat*tau             ;% 1/rad Elevator control power (change in pitch moment wrt. elevator deflection.)
+% Cndr         = -eta_v*vv*CLav*tau             ;% 1/rad Rudder   control power (change in yaw   moment wrt. rudder   deflection.)
+% Cnda         = 0                              ;%
+% CnB          = 0                              ;%
+% Cn0          = 0                              ;%
+% 
+% da           = 0                              ;%
+% de           = 0                              ;% 
+% dr           = 0                              ;%
+% 
+% e0           = 0                              ;%
+% iw           = 0                              ;%
+% it           = 0                              ;%
+% 
+% xCG          = 0                              ;%
+% xAC          = 0                              ;%
+% xNP          = 0                              ;%
+% 
+% Cm0w         = 0                              ;%
+% Cm0f         = 0                              ;%
+% Cm0t         = eta_t*VH*CLat*(e0+iw-it)       ;%
+% Cm0          = Cm0w+Cm0f+Cm0t                 ;% Coefficient of pitching moment wrt zero angle of attack
+% 
+% Cmaw         = CLaw*(xCG-xAC)/cbar            ;%
+% Cmaf         = 0                              ;%
+% Cmat         = -eta_t*VH*CLat*(1-deda)        ;%
+% Cma          = Cmaw+Cmaf+Cmat                 ;%
 % 
 % 
-% %% MAY NOT NEED THESE %%
+% Cl           = 0                              ;% Coefficient of rolling  moment at the center of gravity.
+% Cm           = Cm0 + Cma*alpha + Cmde*de      ;% Coefficient of pitching moment at the center of gravity.
+% Cn           = CnB*Beta+Cnda*da+Cndr*dr+Cn0   ;% Coefficient of yawing   moment at the center of gravity.
+% L            = q*S*b*Cl                       ;% Roll  Moment
+% M            = q*S*c*Cm                       ;% Pitch Moment
+% N            = q*S*b*Cn                       ;% Yaw   Moment
 %           
-% % vt           = v                              ;% ft/s velocity seen by the tail wing
-% % lt           = 24/12                          ;% ft distance from main cg to tail ac
-% % bt           = 24/12                          ;% ft tail wing span
-% % ct           = 5/12                           ;% ft tail chord length
-% % St           = bt*ct                          ;% ft tail wing area
-% % ARt          = bt^2/St                        ;% Tail Aspect Ratio
-% % qt           = 0.5*rho*vt^2                   ;% dynamic pressure at tail
-% % eta_t        = qt/q                           ;% dynamic pressure ratio for tail (can probably assume = 1)
-% % VH           = lt*St/(S*cbar)                 ;% Horizontal Tail Volume Ratio
-% % 
-% % vv           = v                              ;% ft/s velocity seen by the vertical wing
-% % lv           = 24/12                          ;% ft distance from main cg to tail ac
-% % bv           = 24/12                          ;% ft vertical tail wing span
-% % cv           = 5/12                           ;% ft vertical tail chord length
-% % Sv           = bv*cv                          ;% ft vertical tail wing area
-% % ARv          = bv^2/Sv                        ;% Vertical Tail Aspect Ratio
-% % qv           = 0.5*rho*vv^2                   ;% dynamic pressure at vertical tail (can probably assume = 1)
-% % eta_v        = qv/q                           ;% dynamic pressure ratio for vertical tail
-% % Vv           = lv*Sv/(S*cbar)                 ;% Vertical Tail Volume Ratio
-% % 
-% % tau          = 0.7                            ;% Flap Effectiveness Parameter
-% % alpha        = 0                              ;% rad or deg? Angle of Attack
-% % Beta         = 0                              ;% rad or deg? Sideslip Angle
-% % 
-% % CLaw         = 0                              ;%
-% % CLav         = 0                              ;%
-% % CLat         = 0                              ;%
-% % 
-% % deda         = 2*CLaw/(pi*AR)                 ;% Change in downwash angle wrt. AOA
-% % y2           = 30/12                          ;% ft furthest edge of aileron
-% % y1           = 6/12                           ;% ft nearest edge of aileron
-% % Clda         = 2*CLaw*tau/(S*b)*c*(y2-y1)     ;% 1/rad Aileron  control power (change in roll  moment wrt. aileron  deflection.) 
-% % Cmde         = -eta_t*VH*CLat*tau             ;% 1/rad Elevator control power (change in pitch moment wrt. elevator deflection.)
-% % Cndr         = -eta_v*vv*CLav*tau             ;% 1/rad Rudder   control power (change in yaw   moment wrt. rudder   deflection.)
-% % Cnda         = 0                              ;%
-% % CnB          = 0                              ;%
-% % Cn0          = 0                              ;%
-% % 
-% % da           = 0                              ;%
-% % de           = 0                              ;% 
-% % dr           = 0                              ;%
-% % 
-% % e0           = 0                              ;%
-% % iw           = 0                              ;%
-% % it           = 0                              ;%
-% % 
-% % xCG          = 0                              ;%
-% % xAC          = 0                              ;%
-% % xNP          = 0                              ;%
-% % 
-% % Cm0w         = 0                              ;%
-% % Cm0f         = 0                              ;%
-% % Cm0t         = eta_t*VH*CLat*(e0+iw-it)       ;%
-% % Cm0          = Cm0w+Cm0f+Cm0t                 ;% Coefficient of pitching moment wrt zero angle of attack
-% % 
-% % Cmaw         = CLaw*(xCG-xAC)/cbar            ;%
-% % Cmaf         = 0                              ;%
-% % Cmat         = -eta_t*VH*CLat*(1-deda)        ;%
-% % Cma          = Cmaw+Cmaf+Cmat                 ;%
-% % 
-% % 
-% % Cl           = 0                              ;% Coefficient of rolling  moment at the center of gravity.
-% % Cm           = Cm0 + Cma*alpha + Cmde*de      ;% Coefficient of pitching moment at the center of gravity.
-% % Cn           = CnB*Beta+Cnda*da+Cndr*dr+Cn0   ;% Coefficient of yawing   moment at the center of gravity.
-% % L            = q*S*b*Cl                       ;% Roll  Moment
-% % M            = q*S*c*Cm                       ;% Pitch Moment
-% % N            = q*S*b*Cn                       ;% Yaw   Moment
-% %           
-% %           
-% %% MOST LIKELY WONT NEED THESE %%
-% % 
-% % xCG    = 0.25*c                              ;% ft
-% % Ix     = 1                                   ;% Slugft^2
-% % Iy     = 1                                   ;% Slugft^2
-% % Iz     = 1                                   ;% Slugft^2
-% % Ixz    = 1                                   ;% Slugft^2
-% % 
-% % % Lateral Derivatives
-% % YB     = Q*S*CyB/m                           ;% ft/s^2
-% % Yp     = Q*S*b*Cyp/(2*m*v)                   ;% ft/s
-% % Yr     = Q*S*b*Cyr/(2*m*v)                   ;% ft/s
-% % Ydr    = Q*S*Cydr/m                          ;% ft/s^2
-% % LB     = Q*S*b*ClB/Ix                        ;% 1/s^2
-% % Lv     = -0.091                              ;% 1/fts
-% % Lp     = Q*S*b^2*Clp/(2*Ix*v)                ;% 1/s
-% % Lr     = Q*S*b^2*Clr/(2*Ix*v)                ;% 1/s
-% % Lda    = Q*S*b*Clda/Ix                       ;% 1/s^2
-% % Ldr    = Q*S*b*Cldr/Ix                       ;% 1/s^2
-% % NB     = Q*S*b*CnB/Iz                        ;% 1/s^2
-% % Nv     = 0.025                               ;% 1/fts
-% % Np     = Q*S*b^2*Cnp/(2*Iz*v)                ;% 1/s
-% % Nr     = Q*S*b^2*Cnr/(2*Iz*v)                ;% 1/s
-% % Nda    = Q*S*b*Cnda/Iz                       ;% 1/s^2
-% % Ndr    = Q*S*b*Cndr/Iz                       ;% 1/s^2
-% % 
-% % % Longitudinal Derivatives
-% % Xu     = -((CDu+2*CD0)*Q*S)/(m*v)            ;% 1/s
-% % Xw     = -((CDa-CL0)*Q*S)/(m*v)              ;% 1/s
-% % Zu     = -((CLu+2*CL0)*Q*S)/(m*v)            ;% 1/s
-% % Zw     = -((CLa+CD0)*Q*S)/(m*v)              ;% 1/s
-% % Za     = v*Zw                                ;% ft/s^2
-% % Zde    = Czde*Q*S/m                          ;% ft/s^2
-% % Mu     = Cmu*(Q*S*c)/(m*Iy)                  ;% 1/fts
-% % Mw     = Cma*(Q*S*c)/(m*Iy)                  ;% 1/fts
-% % Ma     = v*Mw                                ;% 1/s^2
-% % Mwdot  = Cmadot*(c/(2*v))*...  
-% %          (Q*S*c)/(v*Iy)                      ;% 1/ft
-% % Madot  = v*Mwdot                             ;% 1/s
-% % Mq     = Cmq*c/(2*v)*... 
-% %          (Q*S*c)/Iy                          ;% 1/ft
-% % Mde    = Cmde*(Q*S*c)/Iy                     ;% 1/ft
-% % Xde    = 0                                   ;% (free response)
-% % XdT    = 0                                   ;% (free response)
-% % ZdT    = 0                                   ;% (free response)
-% % MdT    = 0                                   ;% (free response)
+%           
+%% MOST LIKELY WONT NEED THESE %%
+% 
+% xCG    = 0.25*c                              ;% ft
+% Ix     = 1                                   ;% Slugft^2
+% Iy     = 1                                   ;% Slugft^2
+% Iz     = 1                                   ;% Slugft^2
+% Ixz    = 1                                   ;% Slugft^2
+% 
+% % Lateral Derivatives
+% YB     = Q*S*CyB/m                           ;% ft/s^2
+% Yp     = Q*S*b*Cyp/(2*m*v)                   ;% ft/s
+% Yr     = Q*S*b*Cyr/(2*m*v)                   ;% ft/s
+% Ydr    = Q*S*Cydr/m                          ;% ft/s^2
+% LB     = Q*S*b*ClB/Ix                        ;% 1/s^2
+% Lv     = -0.091                              ;% 1/fts
+% Lp     = Q*S*b^2*Clp/(2*Ix*v)                ;% 1/s
+% Lr     = Q*S*b^2*Clr/(2*Ix*v)                ;% 1/s
+% Lda    = Q*S*b*Clda/Ix                       ;% 1/s^2
+% Ldr    = Q*S*b*Cldr/Ix                       ;% 1/s^2
+% NB     = Q*S*b*CnB/Iz                        ;% 1/s^2
+% Nv     = 0.025                               ;% 1/fts
+% Np     = Q*S*b^2*Cnp/(2*Iz*v)                ;% 1/s
+% Nr     = Q*S*b^2*Cnr/(2*Iz*v)                ;% 1/s
+% Nda    = Q*S*b*Cnda/Iz                       ;% 1/s^2
+% Ndr    = Q*S*b*Cndr/Iz                       ;% 1/s^2
+% 
+% % Longitudinal Derivatives
+% Xu     = -((CDu+2*CD0)*Q*S)/(m*v)            ;% 1/s
+% Xw     = -((CDa-CL0)*Q*S)/(m*v)              ;% 1/s
+% Zu     = -((CLu+2*CL0)*Q*S)/(m*v)            ;% 1/s
+% Zw     = -((CLa+CD0)*Q*S)/(m*v)              ;% 1/s
+% Za     = v*Zw                                ;% ft/s^2
+% Zde    = Czde*Q*S/m                          ;% ft/s^2
+% Mu     = Cmu*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% Mw     = Cma*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% Ma     = v*Mw                                ;% 1/s^2
+% Mwdot  = Cmadot*(c/(2*v))*...  
+%          (Q*S*c)/(v*Iy)                      ;% 1/ft
+% Madot  = v*Mwdot                             ;% 1/s
+% Mq     = Cmq*c/(2*v)*... 
+%          (Q*S*c)/Iy                          ;% 1/ft
+% Mde    = Cmde*(Q*S*c)/Iy                     ;% 1/ft
+% Xde    = 0                                   ;% (free response)
+% XdT    = 0                                   ;% (free response)
+% ZdT    = 0                                   ;% (free response)
+% MdT    = 0                                   ;% (free response)
