@@ -1,0 +1,554 @@
+% Eric Zacharia, Aaron Peters, Tim O'Donnell
+% Senior Design
+% Section  1: Aircraft and Battery Parameters
+% Section  2: Lift and Drag Parameters
+% Section  3: Thrust Available and Battery Life
+% Section  4: Thrust and Power
+% Section  5: Endurance and Range
+% Section  6: Rate of Climb
+% Section  7: Take Off Distance
+% Section  8: Gliding and Turning Flight
+% Section  9: Objective Function
+% Section 10: Results and Plots
+
+clear all
+close all
+clc 
+TopRight = [880   385   560   420];
+set(0, 'DefaultFigurePosition', TopRight)
+
+%optimtool - Matlab's optimization tool box 
+
+%% Section 1: Aircraft and Battery Parameters
+% Velocity
+v            =  linspace(0,30,1000)          ;% m/s Freestream Velocity
+% Weight parameters
+Nballs       = 10                            ;% Number of golf balls
+mball        = 45.93                         ;% g per golf ball
+mbox         = 164.427                       ;% g empty box mass
+mbattery     = 82.2136                       ;% g battery mass
+mmotor       = 62.369                        ;% g motor mass
+mplane       = 450                           ;% g plane structure mass
+mempty       = mbox+mbattery+mmotor+mplane   ;% g empty plane mass 
+m            = (Nballs*mball+mempty)/1E3     ;% kg gross mass
+g            = 9.80665                       ;% m/s^2 Gravitational Constant
+W            = m*g                           ;% N Gross weight
+W_pounds     = W*0.224809                     % Pounds Gross Weight (Reference)
+
+% Main Wing parameters
+b            = 2.00                          ;% m Wing Span 
+Rootc        = 0.20                          ;% m Root Chord
+Tipc         = 0.20                          ;% m Tip Chord
+c            = (Rootc+Tipc)/2                ;% m Chord Length 
+S            = b*c                           ;% m^2 Wing Area
+AR           = b^2/S                          % Aspect Ratio
+WL           = W/S                           ;% Pascals Wing Loading
+WL_oz_ft2    = m/S*3.27706                    % oz/ft^2 Wing Loading (Reference)
+
+if AR        > 12                             
+    error('Error. Aspect Ratio should be less than 12. Plane needs to be vibrationally sound and able to maneuver.')
+end
+
+% Atmospheric parameters
+mu           = 1.78E-5                       ;% Ns/m^2 (Dynamic viscosity at 200m)
+Rg           = 287                           ;% J/kgK Gas Constant
+T            = 297                           ;% Kelvin (300 K = 80 F) (temporary SWAG)
+p            = 1E5                           ;% Pa (Static Pressure at 200m) 
+rho          = p/(Rg*T)                       % kg/m^3 (Air Density at 200m)
+
+% Battery parameters
+V            = 11.1                          ;% Volts
+Rt           = 1                             ;% Hours (Battery hour rating)
+n            = 1.3                           ;% Peukert's constant
+CRating      = 20                            ;% 1/Hours
+C            = 1.3                           ;% Ampere*hours  (Capacity)
+IMax         = C*CRating                     ;% Amperes Max Current Draw
+I            = 0.5*IMax                      ;% Amperes Average Current Draw (SWAG)
+t_theory     = Rt/I^n*(C/Rt)^n               ;% Hours (Theoretical Battery Discharge Time)
+eta_battery  = 0.5                           ;% Battery Efficiency
+
+%% Section 2: Lift and Drag Parameters
+L            = 2.0*W                         ;% Newtons Lift (saftey factor for all maneuvers)
+q            = 0.5*rho.*v.^2                 ;% Newton/Meters^2 Dynamic Pressure
+CL           = L./(q.*S)                     ;% Lift Coefficient
+e            = 0.8                            % Oswald Efficiency Factor (SWAG)
+k            = 1/(pi*e*AR)                   ;% Shortcut
+CD0          = 0.035                          % Zero Lift Drag Coefficient (SWAG)
+CDi          = k.*CL.^2                      ;% Induced Drag Coefficient
+CD           = CD0+CDi                       ;% Drag Coefficient
+D            = q.*S.*CD                      ;% Newtons Drag     
+L_D          = L./D                          ;% Lift/Drag Ratio (make around 5.5?)
+
+%% Section 3: Thrust Available and Battery Life
+
+% Small Propeller Experimental Data----------------------------------------
+T_A_100_Small_data = [ 7.77 7.25 7.01 6.88 6.74 6.76 6.71 6.64 6.64...    ;% Newtons Small Prop T_A at 100% Throttle line 1
+                       6.63 6.53 6.53 6.55 6.41 6.35 6.28 5.88 5.48 0.00] ;% Newtons Small Prop T_A at 100% Throttle line 2
+tDischarge_100_Small=   0 : 15 : 270                                      ;% Seconds Discharge Time at 100% Throttle
+        
+T_A_86_Small_data  = [ 7.27 7.18 6.63 6.44 6.34 6.37 6.25 6.18 6.09...    ;% Newtons Small Prop T_A at 86% Throttle line 1
+                       6.10 6.09 6.09 6.04 6.06 5.99 5.97 5.94 5.81...    ;% Newtons Small Prop T_A at 86% Throttle line 2 
+                       5.73 5.43 4.34 0.00]                               ;% Newtons Small Prop T_A at 86% Throttle line 3 
+tDischarge_86_Small=   0 : 15 : 315                                       ;% Seconds Discharge Time at 86% Throttle
+
+T_A_71_Small_data  = [ 5.33 5.37 5.23 5.19 5.02 5.02 5.01 4.94 4.79...    ;% Newtons Small Prop T_A at 71% Throttle line 1
+                       4.87 4.87 4.78 4.75 4.74 4.70 4.70 4.68 4.75...    ;% Newtons Small Prop T_A at 71% Throttle line 2
+                       4.59 4.63 4.52 4.60 4.57 4.55 4.43 4.49 4.46...    ;% Newtons Small Prop T_A at 71% Throttle line 3
+                       4.34 4.10 3.44 0.00 ]                              ;% Newtons Small Prop T_A at 71% Throttle line 4
+tDischarge_71_Small=   0 : 15 : 450                                       ;% Seconds Discharge Time at 71% Throttle
+
+T_A_43_Small_data  = [ 3.18 3.13 3.06 3.04 3.05 3.04 2.99 2.96 2.98...    ;% Newtons Small Prop T_A at 43% Throttle line 1
+                       2.95 2.93 2.88 2.86 2.86 2.84 2.84 2.84 2.76...    ;% Newtons Small Prop T_A at 43% Throttle line 2
+                       2.76 2.76 2.78 2.75 2.74 2.74 2.76 2.74 2.73...    ;% Newtons Small Prop T_A at 43% Throttle line 3
+                       2.73 2.71 2.66 2.67 2.66 2.70 2.64 2.65 2.66...    ;% Newtons Small Prop T_A at 43% Throttle line 4
+                       2.70 2.64 2.64 2.64 2.61 2.53 2.63 2.63 2.63...    ;% Newtons Small Prop T_A at 43% Throttle line 5
+                       2.57 2.61 2.61 2.58 2.52 2.53 2.54 2.52 2.51...    ;% Newtons Small Prop T_A at 43% Throttle line 6
+                       2.45 2.26 1.89 0.00 ]                              ;% Newtons Small Prop T_A at 43% Throttle line 7
+tDischarge_43_Small=   0 : 15 : 855                                       ;% Seconds Discharge Time at 43% Throttle
+
+t100_Small         = linspace(0,270,1000)                                                ;% Time Array    100% Throttle
+T_A_100_Small      = interp1(tDischarge_100_Small,T_A_100_Small_data,t100_Small,'spline');% Interpolation 100% Throttle
+t86_Small          = linspace(0,315,1000)                                                ;% Time Array     86% Throttle
+T_A_86_Small       = interp1(tDischarge_86_Small,T_A_86_Small_data,t86_Small,'spline')   ;% Interpolation  86% Throttle
+t71_Small          = linspace(0,450,1000)                                                ;% Time Array     71% Throttle
+T_A_71_Small       = interp1(tDischarge_71_Small,T_A_71_Small_data,t71_Small,'spline')   ;% Interpolation  71% Throttle
+t43_Small          = linspace(0,855,1000)                                                ;% Time Array     43% Throttle
+T_A_43_Small       = interp1(tDischarge_43_Small,T_A_43_Small_data,t43_Small,'spline')   ;% Interpolation  43% Throttle
+
+% Big Propeller Experimental Data------------------------------------------
+T_A_100_Big_data   = [ 9.73 8.31 8.12 7.97 7.77 7.50 7.38 7.24 7.18...    ;% Newtons Big Prop T_A at 100% Throttle line 1
+                       7.12 6.90 6.88 6.61 2.91 0.00 ]                    ;% Newtons Big Prop T_A at 100% Throttle line 2
+tDischarge_100_Big =   0 : 15 : 210                                       ;% Seconds Discharge Time at 100% Throttle
+        
+T_A_86_Big_data    = [ 8.78 7.70 7.47 7.30 7.37 7.30 7.18 7.11 7.09...    ;% Newtons Big Prop T_A at 86% Throttle line 1
+                       7.03 7.00 6.94 6.91 6.81 6.31 0.00 ]               ;% Newtons Big Prop T_A at 86% Throttle line 2 
+tDischarge_86_Big  =   0 : 15 : 225                                       ;% Seconds Discharge Time at 86% Throttle
+
+T_A_71_Big_data    = [ 6.91 6.47 6.23 6.21 6.14 6.04 6.00 5.97 5.91...    ;% Newtons Big Prop T_A at 71% Throttle line 1
+                       5.81 5.76 5.71 5.70 5.70 5.67 5.65 5.57 5.64...    ;% Newtons Big Prop T_A at 71% Throttle line 2
+                       5.61 5.58 5.49 5.14 4.63 0.00 ]                    ;% Newtons Big Prop T_A at 71% Throttle line 3
+tDischarge_71_Big  =   0 : 15 : 345                                       ;% Seconds Discharge Time at 71% Throttle
+
+T_A_43_Big_data    = [ 3.68 3.58 3.55 3.49 3.42 3.38 3.40 3.37 3.37...    ;% Newtons Big Prop T_A at 43% Throttle line 1
+                       3.29 3.24 3.23 3.24 3.23 3.19 3.19 3.19 3.14...    ;% Newtons Big Prop T_A at 43% Throttle line 2
+                       3.16 3.13 3.12 3.12 3.12 3.08 3.15 3.09 3.05...    ;% Newtons Big Prop T_A at 43% Throttle line 3
+                       3.09 3.07 3.05 2.99 3.05 3.01 3.06 3.04 3.01...    ;% Newtons Big Prop T_A at 43% Throttle line 4
+                       3.02 3.01 2.99 2.94 2.96 2.94 3.01 2.97 2.91...    ;% Newtons Big Prop T_A at 43% Throttle line 5
+                       2.91 2.90 2.89 2.91 2.82 2.78 2.68 2.56 2.27 0.00 ];% Newtons Big Prop T_A at 43% Throttle line 6
+tDischarge_43_Big  =   0 : 15 : 810                                       ;% Seconds Discharge Time at 43% Throttle
+
+t100_Big           = linspace(0,210,1000)                                          ;% Time Array    100% Throttle
+T_A_100_Big        = interp1(tDischarge_100_Big,T_A_100_Big_data,t100_Big,'spline');% Interpolation 100% Throttle
+t86_Big            = linspace(0,225,1000)                                          ;% Time Array     86% Throttle
+T_A_86_Big         = interp1(tDischarge_86_Big,T_A_86_Big_data,t86_Big,'spline')   ;% Interpolation  86% Throttle
+t71_Big            = linspace(0,345,1000)                                          ;% Time Array     71% Throttle
+T_A_71_Big         = interp1(tDischarge_71_Big,T_A_71_Big_data,t71_Big,'spline')   ;% Interpolation  71% Throttle
+t43_Big            = linspace(0,810,1000)                                          ;% Time Array     43% Throttle
+T_A_43_Big         = interp1(tDischarge_43_Big,T_A_43_Big_data,t43_Big,'spline')   ;% Interpolation  43% Throttle
+
+% STATIC Thrust Available vs. Battery Life Plot
+%1----------------------------( SMALL 71% )--------------------------------
+% t            = linspace(0,450,1000)                         ;% Battery Life (Small Propeller)
+% T_As         = T_A_71_Small                                 ;% Newtons STATIC Thrust Available (Small Propeller)
+% d            = 8*0.0254                                     ;% Meters Prop Diameter (in->m) (Small = 8)
+% pitch        = 6*0.0254                                     ;% Meters Prop Pitch    (in->m) (Small = 6)
+%2----------------------------( SMALL 86% )--------------------------------
+% t            = linspace(0,315,1000)                         ;% Battery Life (Small Propeller)
+% T_As         = T_A_86_Small                                 ;% Newtons STATIC Thrust Available (Small Propeller)
+% d            = 8*0.0254                                     ;% Meters Prop Diameter (in->m) (Small = 8)
+% pitch        = 6*0.0254                                     ;% Meters Prop Pitch    (in->m) (Small = 6)
+%3----------------------------( BIG   71% )--------------------------------
+t            = linspace(0,345,1000)                         ;% Battery Life (Big Propeller)
+T_As         = T_A_71_Big                                   ;% Newtons STATIC Thrust Available (Big Propeller)
+d            = 9*0.0254                                     ;% Meters Prop Diameter (in->m) (Big   = 9)
+pitch        = 7*0.0254                                     ;% Meters Prop Pitch    (in->m) (Big   = 7)
+%4----------------------------( BIG   86% )--------------------------------
+% t            = linspace(0,225,1000)                         ;% Battery Life (Big Propeller)
+% T_As         = T_A_86_Big                                   ;% Newtons STATIC Thrust Available (Big Propeller)
+% d            = 9*0.0254                                     ;% Meters Prop Diameter (in->m) (Big   = 9)
+% pitch        = 7*0.0254                                     ;% Meters Prop Pitch    (in->m) (Big   = 7)
+
+%% Section 4: Thrust and Power
+KV           = 1250                          ;% RPM/Volt KV Motor Specification
+eta_KV       = 0.8                           ;% Motor Efficiency 
+A            = pi*d^2/4                      ;% Meters^2 Prop Area
+RPS          = (KV*V)*eta_KV/60              ;% Rotations/Second (SWAG)
+ve           = linspace(RPS*pitch,...        ;% Meters/Second ~Approximated~ Exit Velocity line 1
+               RPS*pitch,1000)               ;% Meters/Second ~Approximated~ Exit Velocity line 2
+mdot         = rho*ve*A                      ;% kg/s Mass Flow Rate through Prop
+ecf          = (d/(3.29546*pitch))^1.5       ;% Empirical Correction Factor 
+% T_As         = mdot.*ve.*ecf               ;% Newtons Static Thrust Available (Liftoff)
+% P_As         = T_As.*v                     ;% Watts   Static Power  Available (Liftoff) 
+% T_A          = mdot.*(ve-v).*ecf           ;% Newtons Dynamic Thrust Available (SLUF)
+T_A          = T_As-(T_As.*v./ve).*ecf       ;% Newtons Dynamic Thrust Available (SLUF)
+P_A          = T_A.*v                        ;% Watts   Dynamic Power  Available (SLUF) 
+T_R          = 1.4.*D                        ;% Newtons Thrust Required (SLUF)
+P_R          = T_R.*v                        ;% Watts   Power  Required (SLUF) 
+
+%% Section 5: Endurance and Range
+% The L=#W multiplier accounts as a safety factor for the turning flight.
+E            = Rt.^(1-n).*(eta_battery.*V... ;% Seconds Endurance line 1
+               .*C./P_R).^n.*3600            ;% Seconds Endurance line 2
+R            = E.*v                          ;% Meters  Range
+      
+%% Section 6: Rate of Climb
+ROC          = (P_A-P_R)./W                   ;% m/s Rate of Climb
+ROCMax       = max(P_A-P_R)./W                ;% m/s Max Rate of Climb
+theta_climb  = asin(ROC./v)*180/pi            ;% Climb Angle
+
+if ROCMax    < 1                              ;% m/s
+    error('Error. Max Rate Of Climb must be greater than 1 m/s. Check Weight.')
+end
+
+vMax         = sqrt(((max(T_A)/W)*(W/S)+ ... ;% m/s Max Velocity line 1
+              (W/S)*sqrt((max(T_A)/W).^2-... ;% m/s Max Velocity line 2
+              (2*CD0*k)))/(rho*CD0))         ;% m/s Max Velocity line 3
+
+%% Section 7: Take Off Distance
+CLMax        = 2.0                           ;% Max Lift Coefficient (SWAG) (can get from airfoil)
+vStall       = sqrt(2*W/(rho*CLMax*S))       ;% m/s Stall Velocity
+mu_r         = 0.07                          ;% Rolling Friction Coeff. (Liftoff Soft Turf)
+v_LO         = 1.2*vStall                    ;% m/s Liftoff Velocity
+CL_LO        = 2.*W./(rho.*v_LO.^2.*S)       ;% Lift Coefficient at Liftoff
+CD_LO        = CD0+CL_LO.^2.*k               ;% Drag Coefficient at Liftoff
+L_LO         = 0.5*rho*(0.7*v_LO)^2*S*CL_LO  ;% N Lift at Liftoff
+D_LO         = 0.5*rho*(0.7*v_LO)^2*S*CD_LO  ;% N Drag at Liftoff
+S_LO         = (1.44*W^2)/(g*rho*S*CLMax*(...;% m Liftoff Distance line 1
+               (T_As(100))/2-(D_LO+mu_r*  ...;% m Liftoff Distance line 2
+               (W-L_LO))))                    % m Liftoff Distance line 3
+%% Section 8: Gliding and Turning Flight
+theta_glide  = atan(1./L_D)*180/pi           ;% Degrees Gliding Angle
+h            = 50                            ;% Meters Altitude 
+Rglide       = L_D*h                         ;% Meters Gliding Range
+
+theta_deg    = 45                            ;% Degrees (SWAG)
+theta        = theta_deg*pi/180              ;% Radians (SWAG)
+Lturn        = L./cos(theta)                 ;% Newtons Lift during turn
+CLturn       = Lturn./(q.*S)                 ;% Lift Coefficient during turn
+nLoad        = Lturn./L                      ;% Load Factor
+Rturn        = 2.*W./(S.*rho.*g.*CLturn)     ;% meters Turning Radius
+w            = g*sqrt(rho.*S.*CLturn.*...    ;% rad/s  Turning Rate line 1
+               nLoad./(2*W))                 ;% rad/s  Turning Rate line 2
+           
+% For Variable Load Factors:           
+BankAngles   = linspace(0,89,1000)*pi/180    ;% Radians (Array of Values)
+Lturns       = W./cos(BankAngles)            ;% Newtons Lift during varying turns
+CLturns      = Lturns./(q.*S)                ;% Lift Coefficient during varying turns
+nLoads       = Lturns./W                     ;% Varying Load Factors
+           
+%% Section 9: Objective Function 
+Lap          = 200                           ;% meters 
+NLaps        = (R/Lap)                       ;% Number of Laps
+Points       = NLaps.*(Nballs+1)             ;% Number of Points
+
+Emax            = max(E)                     ;% Max Endurance
+Rmax            = max(R)                     ;% Max Range
+Lapsmax         = max(NLaps)                  % Max Number of Laps
+[MaxPoints,loc1]= max(Points)                ;% Max Number of Points
+MaxPoints       = MaxPoints                   % Max Number of Points
+MaxPointsVel    = v(loc1)                    ;% Velocity at Max Points 
+[MaxRange,loc2] = max(R)                     ;% Max Range
+MaxRangeVel     = v(loc2)                    ;% Velocity at Max Range 
+[MaxEndur,loc3] = max(E)                     ;% Max Endurance
+MaxEndurVel     = v(loc3)                    ;% Velocity at Max Endurance 
+
+% Reynolds Number
+Re           = rho*v*c/mu                    ;% Reynolds Number
+Re           = rho*MaxRangeVel*c/mu                    ;% Reynolds Number
+
+
+%% Section 10: Results and Plots
+%---------------------( Max Points vs. Velocity )--------------------------
+figure(1)
+plot(v,Points,'g',MaxPointsVel,MaxPoints,'ro')
+grid on
+xlabel('velocity (Meters/Second)')
+ylabel('Points')
+title('Velocity vs. Score') 
+legend('3S battery','Velocity at Max Score')
+
+%---------------------(  Small Propeller Data   )--------------------------
+figure(2)
+subplot(2,2,1)
+plot(tDischarge_100_Small,T_A_100_Small_data,'o',t100_Small,T_A_100_Small)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 100% Throttle, Small Prop.')
+subplot(2,2,2)
+plot(tDischarge_86_Small,T_A_86_Small_data,'o',t86_Small,T_A_86_Small)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 86% Throttle, Small Prop.')
+subplot(2,2,3)
+plot(tDischarge_71_Small,T_A_71_Small_data,'o',t71_Small,T_A_71_Small)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 71% Throttle, Small Prop.')
+subplot(2,2,4)
+plot(tDischarge_43_Small,T_A_43_Small_data,'o',t43_Small,T_A_43_Small)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 43% Throttle, Small Prop.')
+
+%----------------------(  Big Propeller Data   )---------------------------
+figure(3)
+subplot(2,2,1)
+plot(tDischarge_100_Big,T_A_100_Big_data,'o',t100_Big,T_A_100_Big)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 100% Throttle, Big Prop.')
+subplot(2,2,2)
+plot(tDischarge_86_Big,T_A_86_Big_data,'o',t86_Big,T_A_86_Big)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 86% Throttle, Big Prop.')
+subplot(2,2,3)
+plot(tDischarge_71_Big,T_A_71_Big_data,'o',t71_Big,T_A_71_Big)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 71% Throttle, Big Prop.')
+subplot(2,2,4)
+plot(tDischarge_43_Big,T_A_43_Big_data,'o',t43_Big,T_A_43_Big)
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Time @ 43% Throttle, Big Prop.')
+
+%-----------------( Thrust vs. Battery Discharge Time )--------------------
+figure(4)
+plot(t,T_As,'r')
+grid on
+xlabel('Time (Seconds)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Battery Discharge Time')
+
+%----------------------(  Endurance vs. Velocity  )------------------------
+figure(5) 
+plot(v,E,'b--',MaxEndurVel,MaxEndur,'go')
+grid on
+xlabel('velocity (Meters/Second)')
+ylabel('Endurance (Seconds)')
+title('Endurance vs. Velocity') 
+legend('Velocity at Max Endurance')
+
+%------------------------(  Range vs. Velocity  )--------------------------
+figure(6)
+plot(v,R,'r-.',MaxRangeVel,MaxRange,'ro')
+grid on
+xlabel('velocity (Meters/Second)')
+ylabel('Range (Meters)')
+title('Velocity vs. Range') 
+legend('Velocity at Max Range')
+
+%--------------------(  Turning Radius vs. Velocity  )---------------------
+figure(7)
+plot(9.309,3.124,'ro',v,Rturn,'g')
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Turning Radius (Meters)')
+title('Velocity vs. Turning Radius') 
+legend('Radius at optimal velocity')
+
+%---------------------(  Turning Rate vs. Velocity  )----------------------
+figure(8)
+plot(9.309,2.17,'ro',v,w,'b')
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Turning Rate (Radians/Second)')
+title('Velocity vs. Turning Rate') 
+legend('Radius at optimal velocity')
+axis([0 10 0 50])
+
+%----------------------(  Load Factor vs. Velocity  )----------------------
+figure(9) 
+plot(9.039,1.12,'ro',v,nLoads,'r')
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Load Factor')
+title('Velocity vs. Load Factor') 
+legend('Load Factor at optimal velocity')
+
+%----------------------(  Load Factor vs. Bank Angle  )----------------------
+figure(10)
+plot(45,1.414,'ro',BankAngles*180/pi,nLoads,'r')
+grid on
+xlabel('Bank Angle (Degrees)')
+ylabel('Load Factor')
+legend('Load Factor at assumed bank angle')
+title('Load Factor vs. Bank Angle')
+
+%------------------------(  Thrust vs. Velocity  )-------------------------
+figure(11) 
+plot(v,T_R,'k',v,T_A,'m--')
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Thrust (Newtons)')
+title('Thrust vs. Velocity') 
+legend('Thrust Required','Thrust Available')
+axis([0 30 0 40])
+
+%------------------------(  Power vs. Velocity  )--------------------------
+figure(12)
+plot(v,P_R,'g',v,P_A,'b--')
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Power (Watts)')
+title('Power vs. Velocity') 
+legend('Power Required','Power Available')
+axis([0 30 0 300])
+
+%--------------------(  Rate Of Climb vs. Velocity  )----------------------
+figure(13)
+plot(v,ROC)
+grid on
+xlabel('Velocity (Meters/Second)')
+ylabel('Rate Of Climb (Meters/Second)')
+title('Rate Of Climb vs. Velocity')
+axis([0 30 0 10])
+
+% figure(14)
+% plot(L_D,Rglide)
+% xlabel('L/D Ratio')
+% ylabel('Glide Range (Meters)')
+% title('L/D Ratio vs. Glide Range')
+% figure(15)
+% plot(L_D,Points,'m')
+% xlabel('L/D Ratio')
+% ylabel('Points')
+% title('L/D vs. Score') 
+  
+% Horizontal Tail Wing parameters
+vt           = 0.95.*v                       ;% m/s velocity seen by the horizontal tail 
+lt           = 0.5                           ;% m distance from main cg to horizontal tail ac
+bt           = 0.4                           ;% m Horizontal Tail Wing Span 
+Rootct       = 0.065                         ;% m Horizontal Root Chord
+Tipct        = 0.035                         ;% m Horizontal Tip Chord
+ct           = (Rootct+Tipct)/2              ;% m Horizontal Chord Length 
+St           = bt*ct                         ;% m^2 Horizontal Tail Wing Area
+ARt          = bt^2/St                       ;% Horizontal Tail Aspect Ratio
+qt           = 0.5*rho.*vt.^2                ;% dynamic pressure at horizontal tail
+eta_t        = qt/q                          ;% dynamic pressure ratio for horizontal tail (can probably assume = 1)
+VH           = lt*St/(S*c)                   ;% Horizontal Tail Volume Ratio
+
+% Vertical Tail Wing parameters
+vv           = 0.99.*v                       ;% m/s velocity seen by the vertical tail 
+lv           = 0.5                           ;% m distance from main cg to vertical tail ac
+bv           = 0.4                           ;% m Vertical Tail Wing Span 
+Rootcv       = 0.065                         ;% m Vertical Root Chord
+Tipcv        = 0.035                         ;% m Vertical Tip Chord
+cv           = (Rootcv+Tipcv)/2              ;% m Vertical Chord Length 
+Sv           = bv*ct                         ;% m^2 Vertical Tail Wing Area
+ARv          = bv^2/Sv                       ;% Vertical Tail Aspect Ratio
+qv           = 0.5*rho.*vv.^2                ;% dynamic pressure at Vertical tail
+eta_v        = qv/q                          ;% dynamic pressure ratio for Vertical tail (can probably assume = 1)
+VV           = lv*Sv/(S*b);  %b or c?         ;% Vertical Tail Volume Ratio
+
+% Stability 
+alpha        = 45*pi/180                      ;% Radians Angle of Attack
+Beta         = 45*pi/180                      ;% Radians Sideslip Angle
+tau = 1;
+tau_a        = 0.7                            ;% Aileron  Flap Effectiveness Parameter
+tau_e        = 0.7                            ;% Elevator Flap Effectiveness Parameter
+tau_r        = 0.7                            ;% Rudder   Flap Effectiveness Parameter
+
+
+
+CLaw         = 0                              ;%
+CLav         = 0                              ;%
+CLat         = 0                              ;%
+
+deda         = 2*CLaw/(pi*AR)                 ;% Change in downwash angle wrt. AOA
+dsdB         = 0                              ;% Change in SIGMA? wrt. Sideslip Angle
+y2           = 30/12                          ;% m furthest edge of aileron
+y1           = 6/12                           ;% m nearest edge of aileron
+Clda         = 2*CLaw*tau/(S*b)*c*(y2-y1)     ;% 1/rad Aileron  control power (change in roll  moment wrt. aileron  deflection.) 
+Cmde         = -eta_t*VH*CLat*tau             ;% 1/rad Elevator control power (change in pitch moment wrt. elevator deflection.)
+Cndr         = -eta_v*VV*CLav*tau_r           ;% 1/rad Rudder   control power (change in yaw   moment wrt. rudder   deflection.)
+Cnda         = 0                              ;%
+CnB          = eta_v*(1+dsdB)*VV*CLav         ;%
+Cn0          = 0                              ;%
+
+da           = 15*pi/180                      ;% Radians
+de           = 15*pi/180                      ;% Radians
+dr           = 15*pi/180                      ;% Radians
+
+e0           = 0                              ;% 
+iw           = 0                              ;% Main Wing Installation Angle
+it           = 0                              ;% Tail Wing Installation Angle
+
+xCG          = 0.25*c                         ;% Center of Gravity Location
+xAC          = 0.25*c                         ;% Aerodynamic Center Location
+%xNP         =                                ;%
+
+Cm0w         = 0                              ;%
+Cm0f         = 0                              ;%
+Cm0t         = eta_t*VH*CLat*(e0+iw-it)       ;%
+Cm0          = Cm0w+Cm0f+Cm0t                 ;% Coefficient of pitching moment wrt zero angle of attack
+
+Cmaw         = CLaw*(xCG-xAC)/c               ;%
+Cmaf         = 0                              ;%
+Cmat         = -eta_t*VH*CLat*(1-deda)        ;%
+Cma          = Cmaw+Cmaf+Cmat                 ;%
+
+
+Cl           = 0                              ;% Coefficient of rolling  moment at the center of gravity.
+Cm           = Cm0 + Cma*alpha + Cmde*de      ;% Coefficient of pitching moment at the center of gravity.
+Cn           = CnB*Beta+Cndr*dr               ;% Coefficient of yawing   moment at the center of gravity.
+L            = q.*S.*b.*Cl                    ;% Roll  Moment
+M            = q.*S.*c.*Cm                    ;% Pitch Moment
+N            = q.*S.*b.*Cn                    ;% Yaw   Moment
+          
+%           
+%% MOST LIKELY WONT NEED THESE %%
+% 
+% xCG    = 0.25*c                              ;% ft
+% Ix     = 1                                   ;% Slugft^2
+% Iy     = 1                                   ;% Slugft^2
+% Iz     = 1                                   ;% Slugft^2
+% Ixz    = 1                                   ;% Slugft^2
+% 
+% % Lateral Derivatives
+% YB     = Q*S*CyB/m                           ;% ft/s^2
+% Yp     = Q*S*b*Cyp/(2*m*v)                   ;% ft/s
+% Yr     = Q*S*b*Cyr/(2*m*v)                   ;% ft/s
+% Ydr    = Q*S*Cydr/m                          ;% ft/s^2
+% LB     = Q*S*b*ClB/Ix                        ;% 1/s^2
+% Lv     = -0.091                              ;% 1/fts
+% Lp     = Q*S*b^2*Clp/(2*Ix*v)                ;% 1/s
+% Lr     = Q*S*b^2*Clr/(2*Ix*v)                ;% 1/s
+% Lda    = Q*S*b*Clda/Ix                       ;% 1/s^2
+% Ldr    = Q*S*b*Cldr/Ix                       ;% 1/s^2
+% NB     = Q*S*b*CnB/Iz                        ;% 1/s^2
+% Nv     = 0.025                               ;% 1/fts
+% Np     = Q*S*b^2*Cnp/(2*Iz*v)                ;% 1/s
+% Nr     = Q*S*b^2*Cnr/(2*Iz*v)                ;% 1/s
+% Nda    = Q*S*b*Cnda/Iz                       ;% 1/s^2
+% Ndr    = Q*S*b*Cndr/Iz                       ;% 1/s^2
+% 
+% % Longitudinal Derivatives
+% Xu     = -((CDu+2*CD0)*Q*S)/(m*v)            ;% 1/s
+% Xw     = -((CDa-CL0)*Q*S)/(m*v)              ;% 1/s
+% Zu     = -((CLu+2*CL0)*Q*S)/(m*v)            ;% 1/s
+% Zw     = -((CLa+CD0)*Q*S)/(m*v)              ;% 1/s
+% Za     = v*Zw                                ;% ft/s^2
+% Zde    = Czde*Q*S/m                          ;% ft/s^2
+% Mu     = Cmu*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% Mw     = Cma*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% Ma     = v*Mw                                ;% 1/s^2
+% Mwdot  = Cmadot*(c/(2*v))*...  
+%          (Q*S*c)/(v*Iy)                      ;% 1/ft
+% Madot  = v*Mwdot                             ;% 1/s
+% Mq     = Cmq*c/(2*v)*... 
+%          (Q*S*c)/Iy                          ;% 1/ft
+% Mde    = Cmde*(Q*S*c)/Iy                     ;% 1/ft
+% Xde    = 0                                   ;% (free response)
+% XdT    = 0                                   ;% (free response)
+% ZdT    = 0                                   ;% (free response)
+% MdT    = 0                                   ;% (free response)
