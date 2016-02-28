@@ -39,8 +39,8 @@ W            = m*g                           ;% N Gross weight
 W_pounds     = W*0.224809                     % Pounds Gross Weight (Reference)
 
 b            = 2.00                          ;% m Wing Span 
-Rootc        = 0.20                          ;% m Wing Root Chord
-Tipc         = 0.20                          ;% m Wing Tip Chord
+Rootc        = 0.25                          ;% m Wing Root Chord
+Tipc         = 0.25                          ;% m Wing Tip Chord
 c            = (Rootc+Tipc)/2                ;% m Wing Chord Length 
 S            = b*c                           ;% m^2 Wing Area
 AR           = b^2/S                          % Wing Aspect Ratio
@@ -65,17 +65,26 @@ p            = 1E5                           ;% Pa (Static Pressure at 200m)
 rho          = p/(Rg*T)                      ;% kg/m^3 (Air Density at 200m)
 
 %% Section 2: Lift and Drag Parameters
-L            = 1.4*W                         ;% Newtons Lift (# = saftey factor for all maneuvers)
+% L            = 1.4*W                         ;% Newtons Lift (# = saftey factor for all maneuvers)
 q            = 0.5*rho.*v.^2                 ;% Newton/Meters^2 Dynamic Pressure
 e            = 0.8                           ;% Oswald Efficiency Factor (SWAG)
+% CL           = L./(q.*S)                     ;% Lift Coefficient
 
-CL           = L./(q.*S)                     ;% Lift Coefficient
+alpha        = 5*pi/180                     ;% radians Angle of Attack during level flight
+alpha0       = -3.9*pi/180                   ;% radians Zero Lift Angle of Attack
+a0           = 2*pi                          ;% radians/s
+%CL           = a0*(alpha-alpha0)             ;% Lift Coefficient
+CL           = a0/(1+(57.3*a0/(pi*e*AR)))
+L            = q.*S.*CL                       % Newtons Lift
+
+
+
 CDi          = CL.^2/(pi*e*AR)               ;% Induced Drag Coefficient
 CD0          = 0.035                         ;% Zero Lift Drag Coefficient (SWAG)
 CDPlane      = CD0+CDi                       ;% Drag Coefficient
 DPlane       = q.*S.*CDPlane                 ;% Newtons Drag   
 
-CLBox        = 0.2                           ;% Box Lift Coefficient
+CLBox        = 0.3                           ;% Box Lift Coefficient
 CDiBox       = CLBox.^2/(pi*e*ARBox)         ;% Box Induced Drag Coefficient
 CD0Box       = 0.43                          ;% Box Zero Lift Drag Coefficient (Experiment)
 CDBox        = CD0Box+CDiBox                 ;% Box Drag Coefficient
@@ -83,6 +92,7 @@ DBox         = q.*SBox.*CDBox                ;% Newtons Drag
 
 D            = DPlane+DBox                   ;% Newtons Total Drag
 L_D          = L./D                          ;% Lift/Drag Ratio (make around 5.5?)
+
 
 %% Section 3: Thrust, Power, and Battery Life
 % Small Propeller Experimental DATA----------------------------------------
@@ -191,7 +201,10 @@ P_A          = T_A.*v                        ;% Watts   Dynamic Power  Available
 T_R          = 1.5*D                         ;% Newtons Thrust Required (SLUF)
 P_R          = T_R.*v                        ;% Watts   Power  Required (SLUF) 
 
-
+figure(99)
+plot(v,L,'r',v,D,'g',v,W,'b',v,T_A,'m')
+legend('Lift','Drag','Weight','Thrust')
+axis([0 30 0 20])
 %% Section 4: Endurance and Range
 % The L=#W multiplier accounts as a safety factor for the turning flight.
 E            = Rt.^(1-n).*(eta.*V...         ;% Seconds Endurance line 1
