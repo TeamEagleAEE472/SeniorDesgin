@@ -35,12 +35,13 @@ mplane       = 200                           ;% g plane structure mass
 mempty       = mbox+mbattery+mmotor+mplane   ;% g empty plane mass 
 m            = (Nballs*mball+mempty)/1E3     ;% kg gross mass
 g            = 9.80665                       ;% m/s^2 Gravitational Constant
-W            = m*g                           ;% N Gross weight
+W            = m*g                            % N Gross weight
 W_pounds     = W*0.224809                     % Pounds Gross Weight (Reference)
 
 b            = 2.00                          ;% m Wing Span 
 Rootc        = 0.25                          ;% m Wing Root Chord
 Tipc         = 0.25                          ;% m Wing Tip Chord
+tr           = Tipc/Rootc                    ;% Taper Ratio
 c            = (Rootc+Tipc)/2                ;% m Wing Chord Length 
 S            = b*c                           ;% m^2 Wing Area
 AR           = b^2/S                          % Wing Aspect Ratio
@@ -65,17 +66,21 @@ p            = 1E5                           ;% Pa (Static Pressure at 200m)
 rho          = p/(Rg*T)                      ;% kg/m^3 (Air Density at 200m)
 
 %% Section 2: Lift and Drag Parameters
-% L            = 1.4*W                         ;% Newtons Lift (# = saftey factor for all maneuvers)
+L_R          = 1.4*W                         ;% Newtons Lift Required (# = saftey factor for all maneuvers)
 q            = 0.5*rho.*v.^2                 ;% Newton/Meters^2 Dynamic Pressure
 e            = 0.8                           ;% Oswald Efficiency Factor (SWAG)
-% CL           = L./(q.*S)                     ;% Lift Coefficient
 
-alpha        = 5*pi/180                     ;% radians Angle of Attack during level flight
+alpha        = 7 *pi/180                     ;% radians Angle of Attack during level flight
 alpha0       = -3.9*pi/180                   ;% radians Zero Lift Angle of Attack
 a0           = 2*pi                          ;% radians/s
-%CL           = a0*(alpha-alpha0)             ;% Lift Coefficient
-CL           = a0/(1+(57.3*a0/(pi*e*AR)))
-L            = q.*S.*CL                       % Newtons Lift
+% Cl           = a0*(alpha-alpha0)             ;% 2D Lift Coefficient
+% Cla          = Cl/alpha                      ;% Sectional Lift Curve Slope
+% E            = 1+2*tr/(AR*(1+tr))            ;% Jones Correction
+% CLa          = 0.995*(Cla/(E+Cla/(pi*AR)))   ;% Wing Lift Curve Slope     
+% CL           = CLa*alpha                      % 3D Lift Coefficient
+cl           = a0*(alpha-alpha0)             ;% 2D Lift Coefficient
+CL           = 0.75*cl                        % 3D Lift Coefficient (SWAG)
+L            = q.*S.*CL                      ;% Newtons Lift
 
 
 
@@ -93,6 +98,12 @@ DBox         = q.*SBox.*CDBox                ;% Newtons Drag
 D            = DPlane+DBox                   ;% Newtons Total Drag
 L_D          = L./D                          ;% Lift/Drag Ratio (make around 5.5?)
 
+L200         = L(200)                         % Newtons Lift at v = 6 m/s
+D200         = D(200)                         % Newtons Drag at v = 6 m/s
+
+if L(200)    < W                             
+    error('Error. Lift should definitely be greater than Weight above v = 6 m/s.')
+end
 
 %% Section 3: Thrust, Power, and Battery Life
 % Small Propeller Experimental DATA----------------------------------------
@@ -198,17 +209,19 @@ ve           = RPS*pitch*eta                 ;% Meters/Second Theoretical Exit V
 % Thrust and Power
 T_A          = rho*ve*A*(ve-v)               ;% Newtons Dynamic Thrust Available
 P_A          = T_A.*v                        ;% Watts   Dynamic Power  Available (SLUF) 
-T_R          = 1.5*D                         ;% Newtons Thrust Required (SLUF)
+T_R          = (DBox+q.*S.*CD0+L_R.^2./...   ;% Newtons Thrust Required (SLUF) line 1
+               (q.*S.*pi.*e.*AR))            ;% Newtons Thrust Required (SLUF) line 2
 P_R          = T_R.*v                        ;% Watts   Power  Required (SLUF) 
 
-figure(99)
-plot(v,L,'r',v,D,'g',v,W,'b',v,T_A,'m')
-legend('Lift','Drag','Weight','Thrust')
-axis([0 30 0 20])
+if D(200)    > T_A(200)                             
+    error('Error. Thrust should definitely be greater than Drag above v = 6 m/s.')
+end
+
+
 %% Section 4: Endurance and Range
 % The L=#W multiplier accounts as a safety factor for the turning flight.
-E            = Rt.^(1-n).*(eta.*V...         ;% Seconds Endurance line 1
-               .*C./P_R).^n.*3600            ;% Seconds Endurance line 2
+E            = Rt.^(1-n).*(eta.*V.*C./ ...   ;% Seconds Endurance line 1
+               (P_R)).^n.*3600               ;% Seconds Endurance line 2
 R            = E.*v                          ;% Meters  Range
       
 %% Section 5: Rate of Climb
@@ -227,13 +240,13 @@ mu_r         = 0.07                          ;% Rolling Friction Coeff. (Liftoff
 v_LO         = 1.2*vStall                    ;% m/s Liftoff Velocity
 CL_LO        = 2.*W./(rho.*v_LO.^2.*S)       ;% Lift Coefficient at Liftoff
 CDi_LO       = CL_LO.^2/(pi*e*AR)            ;% Induced Drag Coefficient
-CD_Plane_LO  = CD0+CDi_LO                    ;% Drag Coefficient at Liftoff
-CD_Box_LO    = 0.2                           ;% Drag Coefficient at Liftoff
-CDiBox_LO    = CD_Box_LO.^2/(pi*e*ARBox)     ;% Box Induced Drag Coefficient
-CD_Box_LO    = CD0Box+CDiBox_LO              ;% Drag Coefficient at Liftoff
+CDPlane_LO   = CD0+CDi_LO                    ;% Drag Coefficient at Liftoff
+CLBox_LO     = CLBox                         ;% Drag Coefficient at Liftoff
+CDiBox_LO    = CLBox_LO.^2/(pi*e*ARBox)      ;% Box Induced Drag Coefficient
+CDBox_LO     = CD0Box+CDiBox_LO              ;% Drag Coefficient at Liftoff
 L_LO         = 0.5*rho*(0.7*v_LO)^2*S*CL_LO  ;% N Lift at Liftoff
 D_LO         = 0.5*rho*(0.7*v_LO)^2*S*...    ;% N Drag at Liftoff  line 1
-               (CD_Plane_LO+CD_Box_LO)        ;% N Drag at Liftoff  line 2
+               (CDPlane_LO+CDBox_LO)         ;% N Drag at Liftoff  line 2
 S_LO         = (1.44*W^2)/(g*rho*S*CLMax*(...;% m Liftoff Distance line 1
                (T_As)/2-(D_LO+mu_r*  ...     ;% m Liftoff Distance line 2
                (W-L_LO))))                    % m Liftoff Distance line 3
@@ -272,7 +285,7 @@ MaxRangeVel     = v(loc2)                    ;% Optimal Velocity at Max Range
 [MaxEndur,loc3] = max(E)                     ;% Max Endurance
 MaxEndurVel     = v(loc3)                    ;% Optimal Velocity at Max Endurance 
 
-% Reynolds Number of Wing
+%Reynolds Number of Wing
 Re           = rho*v*c/mu                    ;% Reynolds Number
 Re           = rho*MaxRangeVel*c/mu          ;% Reynolds Number
 
@@ -428,142 +441,150 @@ ylabel('Rate Of Climb (Meters/Second)')
 title('Rate Of Climb vs. Velocity   (Full Throttle)')
 axis([0 30 0 10])
 
-% figure(10)
-% plot(L_D,Rglide)
-% xlabel('L/D Ratio')
-% ylabel('Glide Range (Meters)')
-% title('L/D Ratio vs. Glide Range')
-% figure(11)
-% plot(L_D,Points,'m')
-% xlabel('L/D Ratio')
-% ylabel('Points')
-% title('L/D vs. Score') 
-  
-% Horizontal Tail Wing parameters
-vt           = 0.95.*v                       ;% m/s velocity seen by the horizontal tail 
-lt           = 0.5                           ;% m distance from main cg to horizontal tail ac
-bt           = 0.4                           ;% m Horizontal Tail Wing Span 
-Rootct       = 0.065                         ;% m Horizontal Root Chord
-Tipct        = 0.035                         ;% m Horizontal Tip Chord
-ct           = (Rootct+Tipct)/2              ;% m Horizontal Chord Length 
-St           = bt*ct                         ;% m^2 Horizontal Tail Wing Area
-ARt          = bt^2/St                       ;% Horizontal Tail Aspect Ratio
-qt           = 0.5*rho.*vt.^2                ;% dynamic pressure at horizontal tail
-eta_t        = qt/q                          ;% dynamic pressure ratio for horizontal tail (can probably assume = 1)
-VH           = lt*St/(S*c)                   ;% Horizontal Tail Volume Ratio
-
-% Vertical Tail Wing parameters
-vv           = 0.99.*v                       ;% m/s velocity seen by the vertical tail 
-lv           = 0.5                           ;% m distance from main cg to vertical tail ac
-bv           = 0.4                           ;% m Vertical Tail Wing Span 
-Rootcv       = 0.065                         ;% m Vertical Root Chord
-Tipcv        = 0.035                         ;% m Vertical Tip Chord
-cv           = (Rootcv+Tipcv)/2              ;% m Vertical Chord Length 
-Sv           = bv*ct                         ;% m^2 Vertical Tail Wing Area
-ARv          = bv^2/Sv                       ;% Vertical Tail Aspect Ratio
-qv           = 0.5*rho.*vv.^2                ;% dynamic pressure at Vertical tail
-eta_v        = qv/q                          ;% dynamic pressure ratio for Vertical tail (can probably assume = 1)
-VV           = lv*Sv/(S*b);  %b or c?         ;% Vertical Tail Volume Ratio
-
-% Stability 
-alpha        = 45*pi/180                      ;% Radians Angle of Attack
-Beta         = 45*pi/180                      ;% Radians Sideslip Angle
-tau = 1;
-tau_a        = 0.7                            ;% Aileron  Flap Effectiveness Parameter
-tau_e        = 0.7                            ;% Elevator Flap Effectiveness Parameter
-tau_r        = 0.7                            ;% Rudder   Flap Effectiveness Parameter
-
-
-
-CLaw         = 0                              ;%
-CLav         = 0                              ;%
-CLat         = 0                              ;%
-
-deda         = 2*CLaw/(pi*AR)             ;% Change in downwash angle wrt. AOA
-dsdB         = 0                              ;% Change in SIGMA? wrt. Sideslip Angle
-y2           = 30/12                          ;% m furthest edge of aileron
-y1           = 6/12                           ;% m nearest edge of aileron
-Clda         = 2*CLaw*tau/(S*b)*c*(y2-y1)     ;% 1/rad Aileron  control power (change in roll  moment wrt. aileron  deflection.) 
-Cmde         = -eta_t*VH*CLat*tau             ;% 1/rad Elevator control power (change in pitch moment wrt. elevator deflection.)
-Cndr         = -eta_v*VV*CLav*tau_r           ;% 1/rad Rudder   control power (change in yaw   moment wrt. rudder   deflection.)
-Cnda         = 0                              ;%
-CnB          = eta_v*(1+dsdB)*VV*CLav         ;%
-Cn0          = 0                              ;%
-
-da           = 15*pi/180                      ;% Radians
-de           = 15*pi/180                      ;% Radians
-dr           = 15*pi/180                      ;% Radians
-
-e0           = 0                              ;% 
-iw           = 0                              ;% Main Wing Installation Angle
-it           = 0                              ;% Tail Wing Installation Angle
-
-xCG          = 0.25*c                         ;% Center of Gravity Location
-xAC          = 0.25*c                         ;% Aerodynamic Center Location
-%xNP         =                                ;%
-
-Cm0w         = 0                              ;%
-Cm0f         = 0                              ;%
-Cm0t         = eta_t*VH*CLat*(e0+iw-it)       ;%
-Cm0          = Cm0w+Cm0f+Cm0t                 ;% Coefficient of pitching moment wrt zero angle of attack
-
-Cmaw         = CLaw*(xCG-xAC)/c               ;%
-Cmaf         = 0                              ;%
-Cmat         = -eta_t*VH*CLat*(1-deda)        ;%
-Cma          = Cmaw+Cmaf+Cmat                 ;%
-
-
-Cl           = 0                              ;% Coefficient of rolling  moment at the center of gravity.
-Cm           = Cm0 + Cma*alpha + Cmde*de      ;% Coefficient of pitching moment at the center of gravity.
-Cn           = CnB*Beta+Cndr*dr               ;% Coefficient of yawing   moment at the center of gravity.
-L            = q.*S.*b.*Cl                    ;% Roll  Moment
-M            = q.*S.*c.*Cm                    ;% Pitch Moment
-N            = q.*S.*b.*Cn                    ;% Yaw   Moment
-          
+% % figure(10)
+% % plot(L_D,Rglide)
+% % xlabel('L/D Ratio')
+% % ylabel('Glide Range (Meters)')
+% % title('L/D Ratio vs. Glide Range')
+% % figure(11)
+% % plot(L_D,Points,'m')
+% % xlabel('L/D Ratio')
+% % ylabel('Points')
+% % title('L/D vs. Score') 
+% % figure(99)
+% % hold on
+% % plot(v,T_A,'r',v,D,'r--',v,L,'b--',v,W,'b')
+% % legend('Thrust','Drag','Lift','Weight')
+% % xlabel('Velocity (Meters/Second)')
+% % ylabel('Forces (Newtons)')
+% % title('Forces vs. Velocity')
+% % axis([0 20 0 10])
+%   
+% % Horizontal Tail Wing parameters
+% vt           = 0.95.*v                       ;% m/s velocity seen by the horizontal tail 
+% lt           = 0.5                           ;% m distance from main cg to horizontal tail ac
+% bt           = 0.4                           ;% m Horizontal Tail Wing Span 
+% Rootct       = 0.065                         ;% m Horizontal Root Chord
+% Tipct        = 0.035                         ;% m Horizontal Tip Chord
+% ct           = (Rootct+Tipct)/2              ;% m Horizontal Chord Length 
+% St           = bt*ct                         ;% m^2 Horizontal Tail Wing Area
+% ARt          = bt^2/St                       ;% Horizontal Tail Aspect Ratio
+% qt           = 0.5*rho.*vt.^2                ;% dynamic pressure at horizontal tail
+% eta_t        = qt/q                          ;% dynamic pressure ratio for horizontal tail (can probably assume = 1)
+% VH           = lt*St/(S*c)                   ;% Horizontal Tail Volume Ratio
+% 
+% % Vertical Tail Wing parameters
+% vv           = 0.99.*v                       ;% m/s velocity seen by the vertical tail 
+% lv           = 0.5                           ;% m distance from main cg to vertical tail ac
+% bv           = 0.4                           ;% m Vertical Tail Wing Span 
+% Rootcv       = 0.065                         ;% m Vertical Root Chord
+% Tipcv        = 0.035                         ;% m Vertical Tip Chord
+% cv           = (Rootcv+Tipcv)/2              ;% m Vertical Chord Length 
+% Sv           = bv*ct                         ;% m^2 Vertical Tail Wing Area
+% ARv          = bv^2/Sv                       ;% Vertical Tail Aspect Ratio
+% qv           = 0.5*rho.*vv.^2                ;% dynamic pressure at Vertical tail
+% eta_v        = qv/q                          ;% dynamic pressure ratio for Vertical tail (can probably assume = 1)
+% VV           = lv*Sv/(S*b);  %b or c?         ;% Vertical Tail Volume Ratio
+% 
+% % Stability 
+% alpha        = 45*pi/180                      ;% Radians Angle of Attack
+% Beta         = 45*pi/180                      ;% Radians Sideslip Angle
+% tau = 1;
+% tau_a        = 0.7                            ;% Aileron  Flap Effectiveness Parameter
+% tau_e        = 0.7                            ;% Elevator Flap Effectiveness Parameter
+% tau_r        = 0.7                            ;% Rudder   Flap Effectiveness Parameter
+% 
+% 
+% 
+% CLaw         = 0                              ;%
+% CLav         = 0                              ;%
+% CLat         = 0                              ;%
+% 
+% deda         = 2*CLaw/(pi*AR)             ;% Change in downwash angle wrt. AOA
+% dsdB         = 0                              ;% Change in SIGMA? wrt. Sideslip Angle
+% y2           = 30/12                          ;% m furthest edge of aileron
+% y1           = 6/12                           ;% m nearest edge of aileron
+% Clda         = 2*CLaw*tau/(S*b)*c*(y2-y1)     ;% 1/rad Aileron  control power (change in roll  moment wrt. aileron  deflection.) 
+% Cmde         = -eta_t*VH*CLat*tau             ;% 1/rad Elevator control power (change in pitch moment wrt. elevator deflection.)
+% Cndr         = -eta_v*VV*CLav*tau_r           ;% 1/rad Rudder   control power (change in yaw   moment wrt. rudder   deflection.)
+% Cnda         = 0                              ;%
+% CnB          = eta_v*(1+dsdB)*VV*CLav         ;%
+% Cn0          = 0                              ;%
+% 
+% da           = 15*pi/180                      ;% Radians
+% de           = 15*pi/180                      ;% Radians
+% dr           = 15*pi/180                      ;% Radians
+% 
+% e0           = 0                              ;% 
+% iw           = 0                              ;% Main Wing Installation Angle
+% it           = 0                              ;% Tail Wing Installation Angle
+% 
+% xCG          = 0.25*c                         ;% Center of Gravity Location
+% xAC          = 0.25*c                         ;% Aerodynamic Center Location
+% %xNP         =                                ;%
+% 
+% Cm0w         = 0                              ;%
+% Cm0f         = 0                              ;%
+% Cm0t         = eta_t*VH*CLat*(e0+iw-it)       ;%
+% Cm0          = Cm0w+Cm0f+Cm0t                 ;% Coefficient of pitching moment wrt zero angle of attack
+% 
+% Cmaw         = CLaw*(xCG-xAC)/c               ;%
+% Cmaf         = 0                              ;%
+% Cmat         = -eta_t*VH*CLat*(1-deda)        ;%
+% Cma          = Cmaw+Cmaf+Cmat                 ;%
+% 
+% 
+% Clroll       = 0                              ;% Coefficient of rolling  moment at the center of gravity.
+% Cm           = Cm0 + Cma*alpha + Cmde*de      ;% Coefficient of pitching moment at the center of gravity.
+% Cn           = CnB*Beta+Cndr*dr               ;% Coefficient of yawing   moment at the center of gravity.
+% Lroll        = q.*S.*b.*Cl                    ;% Roll  Moment
+% M            = q.*S.*c.*Cm                    ;% Pitch Moment
+% N            = q.*S.*b.*Cn                    ;% Yaw   Moment
 %           
-%% MOST LIKELY WONT NEED THESE %%
-% 
-% xCG    = 0.25*c                              ;% ft
-% Ix     = 1                                   ;% Slugft^2
-% Iy     = 1                                   ;% Slugft^2
-% Iz     = 1                                   ;% Slugft^2
-% Ixz    = 1                                   ;% Slugft^2
-% 
-% % Lateral Derivatives
-% YB     = Q*S*CyB/m                           ;% ft/s^2
-% Yp     = Q*S*b*Cyp/(2*m*v)                   ;% ft/s
-% Yr     = Q*S*b*Cyr/(2*m*v)                   ;% ft/s
-% Ydr    = Q*S*Cydr/m                          ;% ft/s^2
-% LB     = Q*S*b*ClB/Ix                        ;% 1/s^2
-% Lv     = -0.091                              ;% 1/fts
-% Lp     = Q*S*b^2*Clp/(2*Ix*v)                ;% 1/s
-% Lr     = Q*S*b^2*Clr/(2*Ix*v)                ;% 1/s
-% Lda    = Q*S*b*Clda/Ix                       ;% 1/s^2
-% Ldr    = Q*S*b*Cldr/Ix                       ;% 1/s^2
-% NB     = Q*S*b*CnB/Iz                        ;% 1/s^2
-% Nv     = 0.025                               ;% 1/fts
-% Np     = Q*S*b^2*Cnp/(2*Iz*v)                ;% 1/s
-% Nr     = Q*S*b^2*Cnr/(2*Iz*v)                ;% 1/s
-% Nda    = Q*S*b*Cnda/Iz                       ;% 1/s^2
-% Ndr    = Q*S*b*Cndr/Iz                       ;% 1/s^2
-% 
-% % Longitudinal Derivatives
-% Xu     = -((CDu+2*CD0)*Q*S)/(m*v)            ;% 1/s
-% Xw     = -((CDa-CL0)*Q*S)/(m*v)              ;% 1/s
-% Zu     = -((CLu+2*CL0)*Q*S)/(m*v)            ;% 1/s
-% Zw     = -((CLa+CD0)*Q*S)/(m*v)              ;% 1/s
-% Za     = v*Zw                                ;% ft/s^2
-% Zde    = Czde*Q*S/m                          ;% ft/s^2
-% Mu     = Cmu*(Q*S*c)/(m*Iy)                  ;% 1/fts
-% Mw     = Cma*(Q*S*c)/(m*Iy)                  ;% 1/fts
-% Ma     = v*Mw                                ;% 1/s^2
-% Mwdot  = Cmadot*(c/(2*v))*...  
-%          (Q*S*c)/(v*Iy)                      ;% 1/ft
-% Madot  = v*Mwdot                             ;% 1/s
-% Mq     = Cmq*c/(2*v)*... 
-%          (Q*S*c)/Iy                          ;% 1/ft
-% Mde    = Cmde*(Q*S*c)/Iy                     ;% 1/ft
-% Xde    = 0                                   ;% (free response)
-% XdT    = 0                                   ;% (free response)
-% ZdT    = 0                                   ;% (free response)
-% MdT    = 0                                   ;% (free response)
+% %           
+% %% MOST LIKELY WONT NEED THESE %%
+% % 
+% % xCG    = 0.25*c                              ;% ft
+% % Ix     = 1                                   ;% Slugft^2
+% % Iy     = 1                                   ;% Slugft^2
+% % Iz     = 1                                   ;% Slugft^2
+% % Ixz    = 1                                   ;% Slugft^2
+% % 
+% % % Lateral Derivatives
+% % YB     = Q*S*CyB/m                           ;% ft/s^2
+% % Yp     = Q*S*b*Cyp/(2*m*v)                   ;% ft/s
+% % Yr     = Q*S*b*Cyr/(2*m*v)                   ;% ft/s
+% % Ydr    = Q*S*Cydr/m                          ;% ft/s^2
+% % LB     = Q*S*b*ClB/Ix                        ;% 1/s^2
+% % Lv     = -0.091                              ;% 1/fts
+% % Lp     = Q*S*b^2*Clp/(2*Ix*v)                ;% 1/s
+% % Lr     = Q*S*b^2*Clr/(2*Ix*v)                ;% 1/s
+% % Lda    = Q*S*b*Clda/Ix                       ;% 1/s^2
+% % Ldr    = Q*S*b*Cldr/Ix                       ;% 1/s^2
+% % NB     = Q*S*b*CnB/Iz                        ;% 1/s^2
+% % Nv     = 0.025                               ;% 1/fts
+% % Np     = Q*S*b^2*Cnp/(2*Iz*v)                ;% 1/s
+% % Nr     = Q*S*b^2*Cnr/(2*Iz*v)                ;% 1/s
+% % Nda    = Q*S*b*Cnda/Iz                       ;% 1/s^2
+% % Ndr    = Q*S*b*Cndr/Iz                       ;% 1/s^2
+% % 
+% % % Longitudinal Derivatives
+% % Xu     = -((CDu+2*CD0)*Q*S)/(m*v)            ;% 1/s
+% % Xw     = -((CDa-CL0)*Q*S)/(m*v)              ;% 1/s
+% % Zu     = -((CLu+2*CL0)*Q*S)/(m*v)            ;% 1/s
+% % Zw     = -((CLa+CD0)*Q*S)/(m*v)              ;% 1/s
+% % Za     = v*Zw                                ;% ft/s^2
+% % Zde    = Czde*Q*S/m                          ;% ft/s^2
+% % Mu     = Cmu*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% % Mw     = Cma*(Q*S*c)/(m*Iy)                  ;% 1/fts
+% % Ma     = v*Mw                                ;% 1/s^2
+% % Mwdot  = Cmadot*(c/(2*v))*...  
+% %          (Q*S*c)/(v*Iy)                      ;% 1/ft
+% % Madot  = v*Mwdot                             ;% 1/s
+% % Mq     = Cmq*c/(2*v)*... 
+% %          (Q*S*c)/Iy                          ;% 1/ft
+% % Mde    = Cmde*(Q*S*c)/Iy                     ;% 1/ft
+% % Xde    = 0                                   ;% (free response)
+% % XdT    = 0                                   ;% (free response)
+% % ZdT    = 0                                   ;% (free response)
+% % MdT    = 0                                   ;% (free response)
