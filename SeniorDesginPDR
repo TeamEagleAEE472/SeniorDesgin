@@ -34,7 +34,7 @@ mmotor       = 62.369                        ;% g motor mass
 mplane       = 200                           ;% g plane structure mass
 mempty       = mbox+mbattery+mmotor+mplane   ;% g empty plane mass 
 m            = (Nballs*mball+mempty)/1E3     ;% kg gross mass
-g            = 9.80665                       ;% m/s^2 Gravitational Constant
+g            = 9.80665                       ;% m/s^2 Gravitational Acceleration
 W            = m*g                            % N Gross weight
 W_pounds     = W*0.224809                     % Pounds Gross Weight (Reference)
 
@@ -172,17 +172,17 @@ T_As_43_Big         = interp1(tDischarge_43_Big   ,T_As_43_Big_data   ,t43_Big  
 % pitch      = 7*0.0254                                                   ;% Meters Prop Pitch    (in->m) (Small = 6)
 % Throttle   = 1.00                                                       ;% Percent throttle
 %%%%%6----------------------------( BIG   86% )----------------------------
-% T_As       = mean(T_As_86_Big(1:850))                                   ;% Newtons STATIC Thrust Available (Big Propeller)
-% t          = 225/60                                                      % Minutes Time      86% Throttle
-% d          = 9*0.0254                                                   ;% Meters Prop Diameter (in->m) (Small = 8)
-% pitch      = 7*0.0254                                                   ;% Meters Prop Pitch    (in->m) (Small = 6)
-% Throttle   = 0.86                                                       ;% Percent throttle
-%%%%%7----------------------------( BIG   71% )----------------------------
-T_As       = mean(T_As_71_Big(1:850))                                   ;% Newtons STATIC Thrust Available (Big Propeller)
-E_Exp      = 345/60                                                      % Minutes Time      71% Throttle
+T_As       = mean(T_As_86_Big(1:850))                                   ;% Newtons STATIC Thrust Available (Big Propeller)
+t          = 225/60                                                      % Minutes Time      86% Throttle
 d          = 9*0.0254                                                   ;% Meters Prop Diameter (in->m) (Small = 8)
 pitch      = 7*0.0254                                                   ;% Meters Prop Pitch    (in->m) (Small = 6)
-Throttle   = 0.71                                                       ;% Percent throttle
+Throttle   = 0.86                                                       ;% Percent throttle
+%%%%%7----------------------------( BIG   71% )----------------------------
+% T_As       = mean(T_As_71_Big(1:850))                                   ;% Newtons STATIC Thrust Available (Big Propeller)
+% E_Exp      = 345/60                                                      % Minutes Time      71% Throttle
+% d          = 9*0.0254                                                   ;% Meters Prop Diameter (in->m) (Small = 8)
+% pitch      = 7*0.0254                                                   ;% Meters Prop Pitch    (in->m) (Small = 6)
+% Throttle   = 0.71                                                       ;% Percent throttle
 %%%%%8----------------------------( BIG   43% )----------------------------
 % T_As       = mean(T_As_43_Big(1:850))                                   ;% Newtons STATIC Thrust Available (Big Propeller)
 % t          = 810/60                                                      % Minutes Time       43% Throttle
@@ -203,7 +203,8 @@ ve_Exp       = sqrt(T_As/(rho*A))            ;% Meters/Second Experimental Exit 
 T_A_Exp      = rho*ve_Exp*A*(ve_Exp-v)       ;% Newtons Dynamic Thrust Available
 KVmotor      = 1250                          ;% RPM/Volt KV Motor Specification
 RPS          = (KVmotor*V)/60                ;% Rotations/Second 
-eta          = ve_Exp/(RPS*pitch)             % Combined Battery, Motor, and Propeller Efficiency
+%eta          = ve_Exp/(RPS*pitch)             % Combined Battery, Motor, and Propeller Efficiency
+eta          = 0.5                           ;% (SWAG) Combined Battery, Motor, and Propeller Efficiency
 ve           = RPS*pitch*eta                 ;% Meters/Second Theoretical Exit Velocity
 
 % Thrust and Power
@@ -230,7 +231,7 @@ ROCMax       = max(P_A-P_R)./W                % m/s Max Rate of Climb (at full t
 theta_climb  = asin(ROC./v)*180/pi           ;% Climb Angle
 
 if ROCMax    < 0                           ;% m/s
-    error('Error. Max Rate Of Climb must be greater than 0.5 m/s. Check Weight.')
+    error('Error. Max Rate Of Climb must be greater than 0 m/s. Check Thrust, Drag, and Weight.')
 end
 
 %% Section 6: Take Off Distance
@@ -420,7 +421,7 @@ plot(v,T_R,'k',v,T_A,'m--')
 grid on
 xlabel('Velocity (Meters/Second)')
 ylabel('Thrust (Newtons)')
-title('Thrust vs. Velocity   (Full Throttle)') 
+title('Thrust vs. Velocity') 
 legend('Thrust Required','Thrust Available')
 axis([0 30 0 40])
 subplot(2,1,2)
@@ -428,7 +429,7 @@ plot(v,P_R,'g',v,P_A,'b--')
 grid on
 xlabel('Velocity (Meters/Second)')
 ylabel('Power (Watts)')
-title('Power vs. Velocity   (Full Throttle)') 
+title('Power vs. Velocity') 
 legend('Power Required','Power Available')
 axis([0 30 0 300])
 
@@ -438,7 +439,7 @@ plot(v,ROC)
 grid on
 xlabel('Velocity (Meters/Second)')
 ylabel('Rate Of Climb (Meters/Second)')
-title('Rate Of Climb vs. Velocity   (Full Throttle)')
+title('Rate Of Climb vs. Velocity')
 axis([0 30 0 10])
 
 % % figure(10)
